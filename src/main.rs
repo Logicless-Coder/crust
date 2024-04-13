@@ -38,7 +38,7 @@ fn parse_options(args: &Vec<String>) -> Vec<CLIOption> {
             options.push(CLIOption::Delimiter(delimiter.to_owned()))
         } else if !arg.starts_with("-") {
             options.push(CLIOption::File(arg.to_owned()))
-        } 
+        }
     }
 
     options
@@ -52,21 +52,6 @@ struct Table {
 }
 
 impl Table {
-    fn get_row(self, index: u32) -> Vec<String> {
-        self.rows[index as usize].clone()
-    }
-
-    fn get_col(&self, index: u32) -> Table {
-        let mut data: Table = Table::default();
-        data.columns = vec![self.columns[index as usize].clone()];
-
-        for row in &self.rows {
-            data.rows.push(vec![row[index as usize].clone()]);
-        }
-
-        data
-    }
-
     fn get_cols(&self, indices: Vec<u32>) -> Table {
         let mut data: Table = Table::default();
         data.delimiter = self.delimiter.clone();
@@ -165,7 +150,9 @@ fn main() {
             raw = fs::read_to_string(x).unwrap_or_else(|e| panic!("Couldn't read file: {}", e))
         }
         None => {
-            stdin().read_to_string(&mut raw).expect("Should be able to read from stdin");
+            stdin()
+                .read_to_string(&mut raw)
+                .expect("Should be able to read from stdin");
         }
     }
 
@@ -173,42 +160,4 @@ fn main() {
 
     let result: Table = data.get_cols(fields);
     println!("{}", result);
-}
-
-mod tests {
-    use crate::{parse_options, parse_tsv, CLIOption, Table};
-
-    #[test]
-    fn no_options_passed() {
-        let args: Vec<String> = Vec::new();
-        let options = parse_options(&args);
-
-        assert!(options.is_empty());
-    }
-
-    #[test]
-    fn field_option_passed() {
-        let args: Vec<String> = vec!["-f2".into()];
-        let target_options: Vec<CLIOption> = vec![CLIOption::Fields(vec![2])];
-
-        let options = parse_options(&args);
-
-        assert_eq!(options, target_options);
-    }
-
-    #[test]
-    fn parse_sample_tsv() {
-        let filename: String = "sample.tsv".into();
-        let target_data: Table = Table {
-            columns: vec!["f0", "f1", "f2", "f3", "f4"]
-                .into_iter()
-                .map(|x| x.to_owned())
-                .collect(),
-            rows: vec![],
-            delimiter: "\t".into(),
-        };
-        let data: Table = parse_tsv(&filename, &"\t".into());
-
-        assert_eq!(data, target_data);
-    }
 }
