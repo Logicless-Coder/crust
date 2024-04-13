@@ -1,8 +1,8 @@
 use core::{fmt, panic};
 use std::{
     env::args,
-    fmt::{format, Display},
     fs,
+    io::{stdin, Read},
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -36,9 +36,9 @@ fn parse_options(args: &Vec<String>) -> Vec<CLIOption> {
                 .strip_prefix("-d")
                 .expect("Inside if it must start with '-d'");
             options.push(CLIOption::Delimiter(delimiter.to_owned()))
-        } else {
+        } else if !arg.starts_with("-") {
             options.push(CLIOption::File(arg.to_owned()))
-        }
+        } 
     }
 
     options
@@ -123,8 +123,7 @@ impl fmt::Display for Table {
     }
 }
 
-fn parse_tsv(filename: &str, delimiter: &String) -> Table {
-    let raw = fs::read_to_string(filename).unwrap_or_else(|e| panic!("Couldn't read file: {}", e));
+fn parse_tsv(raw: String, delimiter: &String) -> Table {
     let mut data: Table = Table::default();
     data.delimiter = delimiter.clone();
     let mut lines = raw.lines().into_iter().peekable();
@@ -160,11 +159,17 @@ fn main() {
         }
     }
 
-    if filename.is_none() {
-        panic!("No filename specified");
+    let mut raw: String = String::new();
+    match filename {
+        Some(x) => {
+            raw = fs::read_to_string(x).unwrap_or_else(|e| panic!("Couldn't read file: {}", e))
+        }
+        None => {
+            stdin().read_to_string(&mut raw).expect("Should be able to read from stdin");
+        }
     }
 
-    let data: Table = parse_tsv(&filename.unwrap(), &delimiter);
+    let data: Table = parse_tsv(raw, &delimiter);
 
     let result: Table = data.get_cols(fields);
     println!("{}", result);
