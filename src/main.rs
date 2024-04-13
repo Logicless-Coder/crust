@@ -7,7 +7,7 @@ use std::{
 
 #[derive(Debug, PartialEq, Eq)]
 enum CLIOption {
-    Field(u32),
+    Fields(Vec<u32>),
     File(String),
     Delimiter(String),
 }
@@ -17,13 +17,20 @@ fn parse_options(args: &Vec<String>) -> Vec<CLIOption> {
 
     for arg in args {
         if arg.starts_with("-f") {
-            if let Ok(field_num) = arg
+            let mut delim = ",";
+            if arg.contains(" ") && !arg.contains(delim) {
+                delim = " ";
+            }
+            let field_nums: Vec<u32> = arg
                 .strip_prefix("-f")
                 .expect("Inside if it must start with '-f'")
-                .parse::<u32>()
-            {
-                options.push(CLIOption::Field(field_num))
-            }
+                .split(delim)
+                .map(|x| {
+                    x.parse::<u32>()
+                        .unwrap_or_else(|_| panic!("Invalid field specified"))
+                })
+                .collect();
+            options.push(CLIOption::Fields(field_nums));
         } else if arg.starts_with("-d") {
             let delimiter = arg
                 .strip_prefix("-d")
@@ -41,6 +48,7 @@ fn parse_options(args: &Vec<String>) -> Vec<CLIOption> {
 struct Table {
     columns: Vec<String>,
     rows: Vec<Vec<String>>,
+    delimiter: String,
 }
 
 impl Table {
@@ -58,6 +66,24 @@ impl Table {
 
         data
     }
+
+    fn get_cols(&self, indices: Vec<u32>) -> Table {
+        let mut data: Table = Table::default();
+        data.delimiter = self.delimiter.clone();
+        for index in &indices {
+            data.columns.push(self.columns[*index as usize].clone());
+        }
+
+        for row in &self.rows {
+            let mut res_row: Vec<String> = Vec::new();
+            for index in &indices {
+                res_row.push(row[*index as usize].clone());
+            }
+            data.rows.push(res_row);
+        }
+
+        data
+    }
 }
 
 impl Default for Table {
@@ -65,6 +91,7 @@ impl Default for Table {
         Self {
             columns: vec![],
             rows: vec![],
+            delimiter: "\t".into(),
         }
     }
 }
@@ -75,7 +102,7 @@ impl fmt::Display for Table {
         while let Some(col) = cols.next() {
             print!("{}", col);
             if !cols.peek().is_none() {
-                print!("\t");
+                print!("{}", self.delimiter);
             }
         }
         write!(f, "\n")?;
@@ -85,7 +112,7 @@ impl fmt::Display for Table {
             while let Some(val) = vals.next() {
                 print!("{}", val);
                 if !vals.peek().is_none() {
-                    print!("\t");
+                    print!("{}", self.delimiter);
                 }
             }
             if !rows.peek().is_none() {
@@ -99,6 +126,7 @@ impl fmt::Display for Table {
 fn parse_tsv(filename: &str, delimiter: &String) -> Table {
     let raw = fs::read_to_string(filename).unwrap_or_else(|e| panic!("Couldn't read file: {}", e));
     let mut data: Table = Table::default();
+    data.delimiter = delimiter.clone();
     let mut lines = raw.lines().into_iter().peekable();
 
     let columns: Vec<String> = lines
@@ -127,7 +155,7 @@ fn main() {
     for option in options {
         match option {
             CLIOption::File(x) => filename = Some(x),
-            CLIOption::Field(x) => fields.push(x - 1),
+            CLIOption::Fields(x) => fields = x.iter().map(|y| y - 1).collect(),
             CLIOption::Delimiter(x) => delimiter = x,
         }
     }
@@ -138,10 +166,8 @@ fn main() {
 
     let data: Table = parse_tsv(&filename.unwrap(), &delimiter);
 
-    for field in fields {
-        let result: Table = data.get_col(field);
-        println!("{}", result);
-    }
+    let result: Table = data.get_cols(fields);
+    println!("{}", result);
 }
 
 mod tests {
@@ -158,7 +184,7 @@ mod tests {
     #[test]
     fn field_option_passed() {
         let args: Vec<String> = vec!["-f2".into()];
-        let target_options: Vec<CLIOption> = vec![CLIOption::Field(2)];
+        let target_options: Vec<CLIOption> = vec![CLIOption::Fields(vec![2])];
 
         let options = parse_options(&args);
 
@@ -174,8 +200,9 @@ mod tests {
                 .map(|x| x.to_owned())
                 .collect(),
             rows: vec![],
+            delimiter: "\t".into(),
         };
-        let data: Table = parse_tsv(&filename);
+        let data: Table = parse_tsv(&filename, &"\t".into());
 
         assert_eq!(data, target_data);
     }
