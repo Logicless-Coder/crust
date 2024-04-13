@@ -9,6 +9,7 @@ use std::{
 enum CLIOption {
     Field(u32),
     File(String),
+    Delimiter(String),
 }
 
 fn parse_options(args: &Vec<String>) -> Vec<CLIOption> {
@@ -23,6 +24,11 @@ fn parse_options(args: &Vec<String>) -> Vec<CLIOption> {
             {
                 options.push(CLIOption::Field(field_num))
             }
+        } else if arg.starts_with("-d") {
+            let delimiter = arg
+                .strip_prefix("-d")
+                .expect("Inside if it must start with '-d'");
+            options.push(CLIOption::Delimiter(delimiter.to_owned()))
         } else {
             options.push(CLIOption::File(arg.to_owned()))
         }
@@ -65,21 +71,32 @@ impl Default for Table {
 
 impl fmt::Display for Table {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for col in &self.columns {
-            write!(f, "{}\t", col)?;
+        let mut cols = self.columns.clone().into_iter().peekable();
+        while let Some(col) = cols.next() {
+            print!("{}", col);
+            if !cols.peek().is_none() {
+                print!("\t");
+            }
         }
         write!(f, "\n")?;
-        for row in &self.rows {
-            for val in row {
-                write!(f, "{}\t", val)?;
+        let mut rows = self.rows.clone().into_iter().peekable();
+        while let Some(row) = rows.next() {
+            let mut vals = row.into_iter().peekable();
+            while let Some(val) = vals.next() {
+                print!("{}", val);
+                if !vals.peek().is_none() {
+                    print!("\t");
+                }
             }
-            write!(f, "\n")?;
+            if !rows.peek().is_none() {
+                print!("\n");
+            }
         }
         Ok(())
     }
 }
 
-fn parse_tsv(filename: &str) -> Table {
+fn parse_tsv(filename: &str, delimiter: &String) -> Table {
     let raw = fs::read_to_string(filename).unwrap_or_else(|e| panic!("Couldn't read file: {}", e));
     let mut data: Table = Table::default();
     let mut lines = raw.lines().into_iter().peekable();
@@ -87,13 +104,13 @@ fn parse_tsv(filename: &str) -> Table {
     let columns: Vec<String> = lines
         .peek()
         .expect("Lines should not be empty")
-        .split("\t")
+        .split(delimiter)
         .map(|x| x.to_owned())
         .collect();
     data.columns = columns;
 
     for line in lines.skip(1) {
-        let row: Vec<String> = line.split("\t").map(|x| x.to_owned()).collect();
+        let row: Vec<String> = line.split(delimiter).map(|x| x.to_owned()).collect();
         data.rows.push(row);
     }
 
@@ -106,10 +123,12 @@ fn main() {
 
     let mut filename: Option<String> = None;
     let mut fields: Vec<u32> = Vec::new();
+    let mut delimiter: String = "\t".into();
     for option in options {
         match option {
             CLIOption::File(x) => filename = Some(x),
-            CLIOption::Field(y) => fields.push(y - 1),
+            CLIOption::Field(x) => fields.push(x - 1),
+            CLIOption::Delimiter(x) => delimiter = x,
         }
     }
 
@@ -117,7 +136,7 @@ fn main() {
         panic!("No filename specified");
     }
 
-    let data: Table = parse_tsv(&filename.unwrap());
+    let data: Table = parse_tsv(&filename.unwrap(), &delimiter);
 
     for field in fields {
         let result: Table = data.get_col(field);
